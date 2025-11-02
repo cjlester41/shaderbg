@@ -530,29 +530,40 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
-	PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT =
-			(PFNEGLGETPLATFORMDISPLAYEXTPROC)eglGetProcAddress(
-					"eglGetPlatformDisplayEXT");
-	PFNEGLGETPLATFORMDISPLAYKHRPROC eglGetPlatformDisplayKHR =
-			(PFNEGLGETPLATFORMDISPLAYKHRPROC)eglGetProcAddress(
-					"eglGetPlatformDisplayKHR");
+	// ... (after wl_display_roundtrip and extension checks) ...
 
-	if (has_ext_platform && eglGetPlatformDisplayEXT) {
-		state.egl_display = eglGetPlatformDisplayEXT(
-				EGL_PLATFORM_WAYLAND_EXT, state.display, NULL);
-	} else if (has_khr_platform && eglGetPlatformDisplayKHR) {
-		state.egl_display = eglGetPlatformDisplayKHR(
-				EGL_PLATFORM_WAYLAND_KHR, state.display, NULL);
-	} else {
-		fprintf(stderr, "EGL_EXT_platform_wayland or EGL_KHR_platform_wayland "
-				"extension found, but corresponding function pointer is NULL.\n");
-		return EXIT_FAILURE;
+	PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplay =
+			NULL; // Use the one type that is known to exist
+
+	if (has_ext_platform) {
+		eglGetPlatformDisplay = (PFNEGLGETPLATFORMDISPLAYEXTPROC)
+				eglGetProcAddress("eglGetPlatformDisplayEXT");
+		if (eglGetPlatformDisplay) {
+			state.egl_display = eglGetPlatformDisplay(
+					EGL_PLATFORM_WAYLAND_EXT, state.display,
+					NULL);
+		}
+	}
+
+	// Try KHR if EXT failed, wasn't present, or eglGetProcAddress failed
+	if (state.egl_display == EGL_NO_DISPLAY && has_khr_platform) {
+		eglGetPlatformDisplay = (PFNEGLGETPLATFORMDISPLAYEXTPROC)
+				eglGetProcAddress( // Cast to the known EXT type
+						"eglGetPlatformDisplayKHR");
+		if (eglGetPlatformDisplay) {
+			state.egl_display = eglGetPlatformDisplay(
+					EGL_PLATFORM_WAYLAND_KHR, state.display,
+					NULL); // *** FIX: Use KHR enum ***
+		}
 	}
 
 	if (state.egl_display == EGL_NO_DISPLAY) {
 		fprintf(stderr, "Failed to get EGL display: 0x%x\n",
 				eglGetError());
 		return EXIT_FAILURE;
+	}
+
+	// ... (rest of the main function, starting with eglInitialize) ...
 	}
 	int major_version = -1, minor_version = -1;
 	if (!eglInitialize(state.egl_display, &major_version, &minor_version)) {
