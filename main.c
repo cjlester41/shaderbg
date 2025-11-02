@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
+#include <math.h> // For INFINITY
 #include <poll.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -418,11 +419,15 @@ static const char vertex_shader_text[] =
 
 /* Only one newline -- these can mess up the line count in the composed shader
  * and make debugging harder */
-static const char frag_prologue[] = "uniform vec3 iResolution; "
-				    "uniform float iTime; "
-				    "uniform float iTimeDelta; "
-				    "uniform float iFrame; "
-				    "uniform vec4 iMouse;\n";
+static const char frag_prologue[] =
+		"#version 100\n" // Explicitly request GLSL ES 1.0 (for
+				 // WebGL-like shaders)
+		"precision mediump float;\n" // Required for GLSL ES
+		"uniform vec3 iResolution; "
+		"uniform float iTime; "
+		"uniform float iTimeDelta; "
+		"uniform float iFrame; "
+		"uniform vec4 iMouse;\n";
 
 static const char frag_coda[] =
 		"void main() {\n"
@@ -452,7 +457,8 @@ int main(int argc, char **argv)
 			char *endptr = NULL;
 			state.fps = strtof(optarg, &endptr);
 			if (*endptr != '\0' || !(state.fps > 0)) {
-				fprintf(stdout, "Invalid fps '%s'\n", optarg);
+				fprintf(stderr, "Invalid fps '%s'\n",
+						optarg); // Changed to stderr
 				return EXIT_FAILURE;
 			}
 		} break;
@@ -460,7 +466,8 @@ int main(int argc, char **argv)
 			char *endptr = NULL;
 			state.speed = strtof(optarg, &endptr);
 			if (*endptr != '\0' || !(state.speed > 0)) {
-				fprintf(stdout, "Invalid speed '%s'\n", optarg);
+				fprintf(stderr, "Invalid speed '%s'\n",
+						optarg); // Changed to stderr
 				return EXIT_FAILURE;
 			}
 		} break;
@@ -519,18 +526,28 @@ int main(int argc, char **argv)
 	const char *extensions_list =
 			eglQueryString(EGL_NO_DISPLAY, EGL_EXTENSIONS);
 	bool has_ext_platform = false, has_khr_platform = false;
-	if (strstr(extensions_list, "EGL_EXT_platform_wayland")) {
+	if (extensions_list &&
+			strstr(extensions_list,
+					"EGL_EXT_platform_wayland")) { // Added
+								       // NULL
+								       // check
+								       // for
+								       // extensions_list
 		has_ext_platform = true;
 	}
-	if (strstr(extensions_list, "EGL_KHR_platform_wayland")) {
+	if (extensions_list &&
+			strstr(extensions_list,
+					"EGL_KHR_platform_wayland")) { // Added
+								       // NULL
+								       // check
+								       // for
+								       // extensions_list
 		has_khr_platform = true;
 	}
 	if (!has_khr_platform && !has_ext_platform) {
 		fprintf(stderr, "No EGL Wayland platform extension found\n");
 		return EXIT_FAILURE;
 	}
-
-	// ... (after wl_display_roundtrip and extension checks) ...
 
 	PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplay =
 			NULL; // Use the one type that is known to exist
@@ -561,9 +578,6 @@ int main(int argc, char **argv)
 		fprintf(stderr, "Failed to get EGL display: 0x%x\n",
 				eglGetError());
 		return EXIT_FAILURE;
-	}
-
-	// ... (rest of the main function, starting with eglInitialize) ...
 	}
 	int major_version = -1, minor_version = -1;
 	if (!eglInitialize(state.egl_display, &major_version, &minor_version)) {
@@ -657,19 +671,14 @@ int main(int argc, char **argv)
 	GLint glstatus;
 	GLuint frag_shader = glCreateShader(GL_FRAGMENT_SHADER);
 	const char *frag_parts[] = {
-			"#version 100\n" // Explicitly request GLSL ES 1.0 (for
-					 // WebGL-like shaders) or #version 120
-					 // / #version 330 for desktop GLSL
-			"precision mediump float;\n", // Required for GLSL ES
-			frag_prologue,
+			frag_prologue, // Contains #version 100 and precision
 			frag_text,
 			frag_coda,
 	};
 	int frag_lengths[] = {
-			(int)strlen("#version 100\nprecision mediump float;\n"), // Length of version and precision
-			(int)sizeof(frag_prologue) - 1,
+			(int)strlen(frag_prologue),
 			frag_len,
-			(int)sizeof(frag_coda) - 1,
+			(int)strlen(frag_coda),
 	};
 	glShaderSource(frag_shader, sizeof(frag_parts) / sizeof(frag_parts[0]),
 			frag_parts, frag_lengths);
@@ -692,7 +701,7 @@ int main(int argc, char **argv)
 			vertex_shader_text};
 	int vtext_lengths[] = {
 			(int)strlen("#version 100\nprecision mediump float;\n"),
-			(int)sizeof(vertex_shader_text) - 1};
+			(int)strlen(vertex_shader_text)};
 	glShaderSource(vertex_shader,
 			sizeof(vtext_parts) / sizeof(vtext_parts[0]),
 			vtext_parts, vtext_lengths);
@@ -755,15 +764,14 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
-	// ... (Code continues after check_gl_errors("loading shaders"))
-
 	/* bind all globals */
 	wl_display_roundtrip(state.display);
 	/* learn all output names, and create outputs if necessary */
 	wl_display_roundtrip(state.display);
 
 	/*
-	 * 1. DECLARATIONS: Must all be at the top of the block.
+	 * 1. DECLARATIONS: All variables must be declared at the top of the
+	 * block.
 	 */
 	struct timespec start_time;
 	struct timespec next_draw_time;
@@ -791,8 +799,6 @@ int main(int argc, char **argv)
 	display_fd = wl_display_get_fd(state.display);
 
 	while (true) {
-		// ... (Rest of your main loop code)
-		// ... (rest of the file)
 		if (wl_display_dispatch_pending(state.display) == -1) {
 			fprintf(stderr, "Failed to dispatch events\n");
 			break;
