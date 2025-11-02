@@ -755,29 +755,32 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
+	// ... (after glBufferData and check_gl_errors("loading shaders"))
+
 	/* bind all globals */
 	wl_display_roundtrip(state.display);
 	/* learn all output names, and create outputs if necessary */
 	wl_display_roundtrip(state.display);
 
 	struct timespec start_time;
+	struct timespec next_draw_time;  // <-- FIX: Declare only
+	struct timespec last_frame_time; // <-- FIX: Declare only
+
 	clock_gettime(CLOCK_MONOTONIC, &start_time);
-	struct timespec next_draw_time = start_time;
-	struct timespec last_frame_time = start_time;
-	int64_t period_ns =
-			(state.fps == INFINITY)
-					? 0
-					: (1e9f / state.fps); // Handle INFINITY
-							      // for immediate
-							      // draw
-	struct timespec period = {
-			.tv_sec = period_ns / 1000000000,
-			.tv_nsec = period_ns % 1000000000,
-	};
+	next_draw_time = start_time;  // <-- FIX: Assign after start_time is set
+	last_frame_time = start_time; // <-- FIX: Assign after start_time is set
+
+	int64_t period_ns = (state.fps == INFINITY) ? 0 : (1e9f / state.fps);
+	struct timespec period; // <-- FIX: Declare only
+	period.tv_sec = period_ns /
+			1000000000; // <-- FIX: Assign after period_ns is set
+	period.tv_nsec = period_ns %
+			 1000000000; // <-- FIX: Assign after period_ns is set
 
 	int display_fd = wl_display_get_fd(state.display);
 	int ret = EXIT_SUCCESS;
 	while (true) {
+		// ... (rest of the file)
 		if (wl_display_dispatch_pending(state.display) == -1) {
 			fprintf(stderr, "Failed to dispatch events\n");
 			break;
