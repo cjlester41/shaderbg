@@ -755,14 +755,15 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
-	// ... (after check_gl_errors("loading shaders"))
+	// ... (Code continues after check_gl_errors("loading shaders"))
 
 	/* bind all globals */
 	wl_display_roundtrip(state.display);
 	/* learn all output names, and create outputs if necessary */
 	wl_display_roundtrip(state.display);
 
-	/* * FIX: All declarations must come before executable code.
+	/*
+	 * 1. DECLARATIONS: Must all be at the top of the block.
 	 */
 	struct timespec start_time;
 	struct timespec next_draw_time;
@@ -770,21 +771,27 @@ int main(int argc, char **argv)
 	int64_t period_ns;
 	struct timespec period;
 	int display_fd;
-	int ret = EXIT_SUCCESS; // Initialization is fine here
+	int ret = EXIT_SUCCESS; // Initializing a variable in the declaration is
+				// fine.
 
-	/* * Now, all executable code (assignments, function calls)
+	/*
+	 * 2. EXECUTABLE CODE: Assignments and function calls.
 	 */
 	clock_gettime(CLOCK_MONOTONIC, &start_time);
 	next_draw_time = start_time;
 	last_frame_time = start_time;
 
 	period_ns = (state.fps == INFINITY) ? 0 : (1e9f / state.fps);
+
+	// Assigning struct members *after* the struct is declared and
+	// 'period_ns' is set.
 	period.tv_sec = period_ns / 1000000000;
 	period.tv_nsec = period_ns % 1000000000;
 
 	display_fd = wl_display_get_fd(state.display);
 
 	while (true) {
+		// ... (Rest of your main loop code)
 		// ... (rest of the file)
 		if (wl_display_dispatch_pending(state.display) == -1) {
 			fprintf(stderr, "Failed to dispatch events\n");
