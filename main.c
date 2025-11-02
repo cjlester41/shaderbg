@@ -755,30 +755,35 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
-	// ... (after glBufferData and check_gl_errors("loading shaders"))
+	// ... (after check_gl_errors("loading shaders"))
 
 	/* bind all globals */
 	wl_display_roundtrip(state.display);
 	/* learn all output names, and create outputs if necessary */
 	wl_display_roundtrip(state.display);
 
+	/* * FIX: All declarations must come before executable code.
+	 */
 	struct timespec start_time;
-	struct timespec next_draw_time;  // <-- FIX: Declare only
-	struct timespec last_frame_time; // <-- FIX: Declare only
+	struct timespec next_draw_time;
+	struct timespec last_frame_time;
+	int64_t period_ns;
+	struct timespec period;
+	int display_fd;
+	int ret = EXIT_SUCCESS; // Initialization is fine here
 
+	/* * Now, all executable code (assignments, function calls)
+	 */
 	clock_gettime(CLOCK_MONOTONIC, &start_time);
-	next_draw_time = start_time;  // <-- FIX: Assign after start_time is set
-	last_frame_time = start_time; // <-- FIX: Assign after start_time is set
+	next_draw_time = start_time;
+	last_frame_time = start_time;
 
-	int64_t period_ns = (state.fps == INFINITY) ? 0 : (1e9f / state.fps);
-	struct timespec period; // <-- FIX: Declare only
-	period.tv_sec = period_ns /
-			1000000000; // <-- FIX: Assign after period_ns is set
-	period.tv_nsec = period_ns %
-			 1000000000; // <-- FIX: Assign after period_ns is set
+	period_ns = (state.fps == INFINITY) ? 0 : (1e9f / state.fps);
+	period.tv_sec = period_ns / 1000000000;
+	period.tv_nsec = period_ns % 1000000000;
 
-	int display_fd = wl_display_get_fd(state.display);
-	int ret = EXIT_SUCCESS;
+	display_fd = wl_display_get_fd(state.display);
+
 	while (true) {
 		// ... (rest of the file)
 		if (wl_display_dispatch_pending(state.display) == -1) {
