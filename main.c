@@ -799,12 +799,16 @@ int main(int argc, char **argv)
 	display_fd = wl_display_get_fd(state.display);
 
 	while (true) {
-		if (wl_display_dispatch_pending(state.display) == -1) {
-			fprintf(stderr, "Failed to dispatch events\n");
-			break;
+		// Dispatch pending events first, before attempting to read more
+		while (wl_display_dispatch_pending(state.display) != -1) {
+			// Keep dispatching until there are no more pending
+			// events
 		}
+
+		// After dispatching, flush any outgoing requests
 		if (wl_display_flush(state.display) == -1 && errno != EAGAIN) {
-			fprintf(stderr, "Failed to flush\n");
+			fprintf(stderr, "Failed to flush Wayland display: %s\n",
+					strerror(errno));
 			break;
 		}
 
@@ -849,18 +853,46 @@ int main(int argc, char **argv)
 		if (nr < 0 && (errno == EAGAIN || errno == EINTR)) {
 			continue;
 		} else if (nr < 0) {
-			fprintf(stderr, "poll failure\n");
+			fprintf(stderr, "poll failure: %s\n", strerror(errno));
 			break;
 		}
 
-		if (pollfd.revents & POLLIN) {
-			if (wl_display_prepare_read(state.display) == -1) {
-				fprintf(stderr, "Failed to prepare read\n");
+		// Before reading, call prepare_read
+		// If prepare_read returns -1 and errno is EAGAIN, it means
+		// there are already events in the internal buffer, and we
+		// should just dispatch them. Otherwise, it means we can safely
+		// read new events.
+		int prepare_status = wl_display_prepare_read(state.display);
+		if (prepare_status == -1) {
+			if (errno == EAGAIN) {
+				// Events already in the buffer, just dispatch.
+				// Don't call read_events. The outer
+				// wl_display_dispatch_pending will handle them.
+			} else {
+				fprintf(stderr, "Failed to prepare read: %s\n",
+						strerror(errno));
 				break;
 			}
-			if (wl_display_read_events(state.display) == -1) {
-				fprintf(stderr, "Failed to read events\n");
-				break;
+		} else {
+			// If prepare_read succeeded, then we should read from
+			// the socket only if poll indicated there's data
+			// (POLLIN).
+			if (nr > 0 && (pollfd.revents & POLLIN)) {
+				if (wl_display_read_events(state.display) ==
+						-1) {
+					fprintf(stderr, "Failed to read events: %s\n",
+							strerror(errno));
+					// If reading fails, we should cancel
+					// the read preparation. This is crucial
+					// for Wayland's state machine.
+					wl_display_cancel_read(state.display);
+					break;
+				}
+			} else {
+				// If poll timed out (nr == 0) or no POLLIN
+				// event, we must cancel the read preparation as
+				// we didn't read.
+				wl_display_cancel_read(state.display);
 			}
 		}
 
