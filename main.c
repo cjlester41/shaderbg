@@ -417,17 +417,12 @@ static const char vertex_shader_text[] =
 		"  gl_Position = vec4(pos.x, pos.y, 0, 1);\n"
 		"}\n";
 
-/* Only one newline -- these can mess up the line count in the composed shader
- * and make debugging harder */
-static const char frag_prologue[] =
-		"#version 100\n" // Explicitly request GLSL ES 1.0 (for
-				 // WebGL-like shaders)
-		"precision mediump float;\n" // Required for GLSL ES
-		"uniform vec3 iResolution; "
-		"uniform float iTime; "
-		"uniform float iTimeDelta; "
-		"uniform float iFrame; "
-		"uniform vec4 iMouse;\n";
+/* *** FIX: Reverted to the original prologue without #version *** */
+static const char frag_prologue[] = "uniform vec3 iResolution; "
+				    "uniform float iTime; "
+				    "uniform float iTimeDelta; "
+				    "uniform float iFrame; "
+				    "uniform vec4 iMouse;\n";
 
 static const char frag_coda[] =
 		"void main() {\n"
@@ -671,7 +666,7 @@ int main(int argc, char **argv)
 	GLint glstatus;
 	GLuint frag_shader = glCreateShader(GL_FRAGMENT_SHADER);
 	const char *frag_parts[] = {
-			frag_prologue, // Contains #version 100 and precision
+			frag_prologue, // Contains uniforms, no version
 			frag_text,
 			frag_coda,
 	};
@@ -694,17 +689,10 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
+	/* *** FIX: Reverted to the original vertex shader loading *** */
 	GLuint vertex_shader = glCreateShader(GL_VERTEX_SHADER);
-	const char *vtext_parts[] = {
-			"#version 100\n" // Explicitly request GLSL ES 1.0
-			"precision mediump float;\n", // Required for GLSL ES
-			vertex_shader_text};
-	int vtext_lengths[] = {
-			(int)strlen("#version 100\nprecision mediump float;\n"),
-			(int)strlen(vertex_shader_text)};
-	glShaderSource(vertex_shader,
-			sizeof(vtext_parts) / sizeof(vtext_parts[0]),
-			vtext_parts, vtext_lengths);
+	const char *vtext = vertex_shader_text;
+	glShaderSource(vertex_shader, 1, &vtext, NULL);
 	glCompileShader(vertex_shader);
 	glGetShaderiv(vertex_shader, GL_COMPILE_STATUS, &glstatus);
 	if (!glstatus) {
@@ -857,41 +845,25 @@ int main(int argc, char **argv)
 			break;
 		}
 
-		// Before reading, call prepare_read
-		// If prepare_read returns -1 and errno is EAGAIN, it means
-		// there are already events in the internal buffer, and we
-		// should just dispatch them. Otherwise, it means we can safely
-		// read new events.
 		int prepare_status = wl_display_prepare_read(state.display);
 		if (prepare_status == -1) {
 			if (errno == EAGAIN) {
 				// Events already in the buffer, just dispatch.
-				// Don't call read_events. The outer
-				// wl_display_dispatch_pending will handle them.
 			} else {
 				fprintf(stderr, "Failed to prepare read: %s\n",
 						strerror(errno));
 				break;
 			}
 		} else {
-			// If prepare_read succeeded, then we should read from
-			// the socket only if poll indicated there's data
-			// (POLLIN).
 			if (nr > 0 && (pollfd.revents & POLLIN)) {
 				if (wl_display_read_events(state.display) ==
 						-1) {
 					fprintf(stderr, "Failed to read events: %s\n",
 							strerror(errno));
-					// If reading fails, we should cancel
-					// the read preparation. This is crucial
-					// for Wayland's state machine.
 					wl_display_cancel_read(state.display);
 					break;
 				}
 			} else {
-				// If poll timed out (nr == 0) or no POLLIN
-				// event, we must cancel the read preparation as
-				// we didn't read.
 				wl_display_cancel_read(state.display);
 			}
 		}
